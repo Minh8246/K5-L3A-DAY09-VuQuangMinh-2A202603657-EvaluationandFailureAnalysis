@@ -70,8 +70,30 @@ def paired_bootstrap(a: Sequence[float], b: Sequence[float], *, n_resamples: int
     """a[i], b[i] = per-item mean over seeds, SAME items, SAME order.
     Return (mean(a)-mean(b), lo, hi) with scipy.stats.bootstrap(paired=True, method="percentile",
     rng=numpy.random.default_rng(rng)). If a == b everywhere return (0.0, 0.0, 0.0)."""
-    # TODO M4
-    raise NotImplementedError
+    # Imported here, not at module top: Lab 8's CI collects these tests with only Lab 8 dependencies.
+    import numpy as np
+    from scipy.stats import bootstrap
+
+    a_arr, b_arr = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    if a_arr.shape != b_arr.shape or a_arr.ndim != 1:
+        raise ValueError(f"paired samples need the same items in the same order: {a_arr.shape} vs {b_arr.shape}")
+    if a_arr.size == 0:
+        raise ValueError("paired bootstrap needs at least one item")
+    if np.array_equal(a_arr, b_arr):
+        return (0.0, 0.0, 0.0)
+    diff = float(a_arr.mean() - b_arr.mean())
+    if a_arr.size == 1:
+        # One item: every resample is that same item, so the bootstrap distribution is the point itself.
+        return (diff, diff, diff)
+
+    def mean_diff(x, y, axis=-1):
+        return x.mean(axis=axis) - y.mean(axis=axis)
+
+    # paired=True resamples ITEM indices and keeps a[i] with b[i]: each item is compared with itself.
+    res = bootstrap((a_arr, b_arr), mean_diff, paired=True, vectorized=True,
+                    n_resamples=n_resamples, confidence_level=confidence, method="percentile",
+                    rng=np.random.default_rng(rng))
+    return (diff, float(res.confidence_interval.low), float(res.confidence_interval.high))
 
 
 def pass_at_k(n: int, c: int, k: int) -> float:
