@@ -12,28 +12,57 @@ from collections.abc import Sequence
 POS = "FAIL"   # the judge's job is to FIND failures, so FAIL is the positive class
 
 
+def _is_fail(label: str) -> bool:
+    return str(label).strip().upper() == POS
+
+
+def _paired(human: Sequence[str], judge: Sequence[str]) -> list[tuple[bool, bool]]:
+    """(human says FAIL, judge says FAIL) per row. Unequal lengths would silently drop rows in zip()."""
+    if len(human) != len(judge):
+        raise ValueError(f"human has {len(human)} labels, judge has {len(judge)}")
+    return [(_is_fail(h), _is_fail(j)) for h, j in zip(human, judge)]
+
+
 def confusion(human: Sequence[str], judge: Sequence[str]) -> dict[str, int]:
     """tp/fp/fn/tn with FAIL as positive."""
-    # TODO M2
-    raise NotImplementedError
+    c = {"tp": 0, "fp": 0, "fn": 0, "tn": 0}
+    for h_fail, j_fail in _paired(human, judge):
+        if j_fail:
+            c["tp" if h_fail else "fp"] += 1     # judge flagged it: a real failure, or a false alarm
+        else:
+            c["fn" if h_fail else "tn"] += 1     # judge let it pass: a missed failure, or a correct pass
+    return c
 
 
 def precision_recall(human: Sequence[str], judge: Sequence[str]) -> tuple[float, float]:
-    # TODO M2: precision = tp/(tp+fp), recall = tp/(tp+fn); return 0.0 when the denominator is 0
-    raise NotImplementedError
+    c = confusion(human, judge)
+    precision = c["tp"] / (c["tp"] + c["fp"]) if c["tp"] + c["fp"] else 0.0
+    recall = c["tp"] / (c["tp"] + c["fn"]) if c["tp"] + c["fn"] else 0.0
+    return precision, recall
 
 
 def cohen_kappa(human: Sequence[str], judge: Sequence[str]) -> float:
     """kappa = (p_o - p_e) / (1 - p_e). Raise ValueError when undefined (p_e == 1):
     a constant judge has no signal and must FAIL calibration, not pass on a technicality."""
-    # TODO M2
-    raise NotImplementedError
+    pairs = _paired(human, judge)
+    n = len(pairs)
+    if n == 0:
+        raise ValueError("kappa undefined: no labels")
+    p_o = sum(h == j for h, j in pairs) / n                  # observed agreement
+    h_fail = sum(h for h, _ in pairs) / n
+    j_fail = sum(j for _, j in pairs) / n
+    p_e = h_fail * j_fail + (1 - h_fail) * (1 - j_fail)     # agreement expected by chance alone
+    if p_e == 1:
+        raise ValueError("kappa undefined: both raters give one constant label")
+    return (p_o - p_e) / (1 - p_e)
 
 
 def rogan_gladen(observed_rate: float, sensitivity: float, specificity: float) -> float:
     """Correct an observed failure rate for judge error; clip to [0, 1]."""
-    # TODO M2: (p_obs + spec - 1) / (sens + spec - 1)
-    raise NotImplementedError
+    denom = sensitivity + specificity - 1
+    if denom <= 0:
+        raise ValueError("Rogan-Gladen undefined: the judge is no better than chance (sens + spec <= 1)")
+    return min(1.0, max(0.0, (observed_rate + specificity - 1) / denom))
 
 
 def paired_bootstrap(a: Sequence[float], b: Sequence[float], *, n_resamples: int = 1000,
