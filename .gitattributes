@@ -1,0 +1,5 @@
+# Keep files byte-identical on every OS: the eval gate hashes eval_set_v1.jsonl,
+# and Windows autocrlf would otherwise give it a different sha than CI (Linux).
+* text=auto eol=lf
+# The instructor's judge CSVs are committed with CRLF; leave them byte-for-byte as shipped.
+*.csv -text
